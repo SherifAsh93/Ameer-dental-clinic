@@ -8,12 +8,15 @@ const AppointmentManager: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingAppId, setEditingAppId] = useState<string | null>(null);
   
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [appDate, setAppDate] = useState('');
   const [appTime, setAppTime] = useState('');
   const [appReason, setAppReason] = useState('');
+  const [appStatus, setAppStatus] = useState<AppointmentStatus>(AppointmentStatus.SCHEDULED);
 
   useEffect(() => {
     loadData();
@@ -28,24 +31,59 @@ const AppointmentManager: React.FC = () => {
     setPatients(pts);
   };
 
-  const handleAddAppointment = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setSelectedPatientId('');
+    setAppDate('');
+    setAppTime('');
+    setAppReason('');
+    setAppStatus(AppointmentStatus.SCHEDULED);
+    setIsEditing(false);
+    setEditingAppId(null);
+  };
+
+  const handleOpenAddModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const handleOpenEditModal = (app: Appointment) => {
+    setSelectedPatientId(app.patientId);
+    const [date, time] = app.dateTime.split('T');
+    setAppDate(date);
+    setAppTime(time);
+    setAppReason(app.reason);
+    setAppStatus(app.status);
+    setIsEditing(true);
+    setEditingAppId(app.id);
+    setShowModal(true);
+  };
+
+  const handleSaveAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     const patient = patients.find(p => p.id === selectedPatientId);
     if (!patient) return;
 
-    const newApp: Appointment = {
-      id: Math.random().toString(36).substr(2, 9),
+    const appData: Appointment = {
+      id: isEditing ? (editingAppId as string) : Math.random().toString(36).substr(2, 9),
       patientId: patient.id,
       patientName: patient.name,
       dateTime: `${appDate}T${appTime}`,
       duration: 30,
       reason: appReason,
-      status: AppointmentStatus.SCHEDULED
+      status: appStatus
     };
 
-    await dbService.saveAppointment(newApp);
-    setShowAddModal(false);
+    await dbService.saveAppointment(appData);
+    setShowModal(false);
+    resetForm();
     loadData();
+  };
+
+  const handleDeleteAppointment = async (id: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا الموعد؟')) {
+      await dbService.deleteAppointment(id);
+      loadData();
+    }
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -74,7 +112,7 @@ const AppointmentManager: React.FC = () => {
       {/* Header with Toggle */}
       <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
             <i className="fas fa-calendar-check"></i>
           </div>
           <h2 className="text-base md:text-xl font-black text-slate-800">جدول المواعيد</h2>
@@ -116,7 +154,7 @@ const AppointmentManager: React.FC = () => {
 
               <div className="grid grid-cols-7 gap-px bg-slate-100 rounded-2xl overflow-hidden border border-slate-100">
                 {dayNamesAr.map(d => (
-                  <div key={d} className="bg-white py-3 text-center text-[10px] font-black text-indigo-600 uppercase">
+                  <div key={d} className="bg-white py-3 text-center text-[10px] font-black text-blue-600 uppercase">
                     {d}
                   </div>
                 ))}
@@ -129,12 +167,12 @@ const AppointmentManager: React.FC = () => {
                     <div key={idx} className={`bg-white min-h-[70px] md:min-h-[100px] p-1 transition-colors ${day ? 'hover:bg-slate-50' : 'bg-slate-50/50'}`}>
                       {day && (
                         <>
-                          <div className={`text-[10px] font-black mb-1 flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>
+                          <div className={`text-[10px] font-black mb-1 flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>
                             {day}
                           </div>
                           <div className="space-y-0.5">
                             {dayApps.slice(0, 3).map(app => (
-                              <div key={app.id} className="text-[8px] p-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100 font-bold truncate">
+                              <div key={app.id} onClick={() => handleOpenEditModal(app)} className="text-[8px] p-1 bg-blue-50 text-blue-700 rounded border border-blue-100 font-bold truncate cursor-pointer hover:bg-blue-100">
                                 {app.dateTime.split('T')[1].substr(0, 5)} {app.patientName}
                               </div>
                             ))}
@@ -149,13 +187,14 @@ const AppointmentManager: React.FC = () => {
             </div>
           ) : (
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
-               <table className="w-full text-right min-w-[500px]">
+               <table className="w-full text-right min-w-[600px]">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">الموعد</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">المريض</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">السبب</th>
                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">الحالة</th>
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-center">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -168,9 +207,22 @@ const AppointmentManager: React.FC = () => {
                         <td className="px-6 py-4 text-xs font-black text-slate-900">{app.patientName}</td>
                         <td className="px-6 py-4 text-[10px] text-slate-500 font-bold">{app.reason}</td>
                         <td className="px-6 py-4">
-                           <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[9px] font-black uppercase">
+                           <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
+                             app.status === AppointmentStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600' : 
+                             app.status === AppointmentStatus.CANCELLED ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+                           }`}>
                              {app.status}
                            </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => handleOpenEditModal(app)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors flex items-center justify-center">
+                              <i className="fas fa-edit text-xs"></i>
+                            </button>
+                            <button onClick={() => handleDeleteAppointment(app.id)} className="w-8 h-8 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors flex items-center justify-center">
+                              <i className="fas fa-trash-alt text-xs"></i>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -181,9 +233,9 @@ const AppointmentManager: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-xl shadow-indigo-100 text-center">
+          <div className="bg-blue-600 p-6 rounded-[2rem] text-white shadow-xl shadow-blue-100 text-center">
              <div className="text-3xl font-black mb-1">{todayApps.length}</div>
-             <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest">مواعيد اليوم</p>
+             <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest">مواعيد اليوم</p>
           </div>
 
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-5 min-h-[300px]">
@@ -196,8 +248,8 @@ const AppointmentManager: React.FC = () => {
                   </div>
                 ) : (
                   todayApps.map(app => (
-                    <div key={app.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
-                       <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-indigo-600 font-black text-[10px] shadow-sm">
+                    <div key={app.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3 group cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => handleOpenEditModal(app)}>
+                       <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-blue-600 font-black text-[10px] shadow-sm">
                           {app.dateTime.split('T')[1].substr(0, 5)}
                        </div>
                        <div className="flex-1 min-w-0">
@@ -210,7 +262,7 @@ const AppointmentManager: React.FC = () => {
           </div>
           
           <button 
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModal}
             className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs hover:bg-slate-800 transition-all shadow-xl"
           >
             حجز جديد
@@ -218,18 +270,18 @@ const AppointmentManager: React.FC = () => {
         </div>
       </div>
 
-      {showAddModal && (
+      {showModal && (
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white w-full max-w-lg rounded-t-[2rem] md:rounded-[2.5rem] shadow-2xl p-8 animate-in slide-in-from-bottom">
              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-slate-900">حجز موعد</h3>
-                <button onClick={() => setShowAddModal(false)} className="text-slate-400"><i className="fas fa-times"></i></button>
+                <h3 className="text-lg font-black text-slate-900">{isEditing ? 'تعديل موعد' : 'حجز موعد جديد'}</h3>
+                <button onClick={() => setShowModal(false)} className="text-slate-400"><i className="fas fa-times"></i></button>
              </div>
              
-             <form onSubmit={handleAddAppointment} className="space-y-4">
+             <form onSubmit={handleSaveAppointment} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase pr-2">المريض</label>
-                  <select required value={selectedPatientId} onChange={e => setSelectedPatientId(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-right font-bold text-xs">
+                  <select required value={selectedPatientId} onChange={e => setSelectedPatientId(e.target.value)} disabled={isEditing} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-bold text-xs disabled:opacity-50">
                     <option value="">اختر مريض...</option>
                     {patients.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
@@ -240,21 +292,32 @@ const AppointmentManager: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase pr-2">التاريخ</label>
-                    <input type="date" required value={appDate} onChange={e => setAppDate(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-right font-bold text-xs" />
+                    <input type="date" required value={appDate} onChange={e => setAppDate(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-bold text-xs" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase pr-2">الوقت</label>
-                    <input type="time" required value={appTime} onChange={e => setAppTime(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-right font-bold text-xs" />
+                    <input type="time" required value={appTime} onChange={e => setAppTime(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-bold text-xs" />
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase pr-2">السبب</label>
-                  <input type="text" required value={appReason} onChange={e => setAppReason(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-right font-bold text-xs" placeholder="مثلاً: كشف، حشو..." />
+                  <input type="text" required value={appReason} onChange={e => setAppReason(e.target.value)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-bold text-xs" placeholder="مثلاً: كشف، حشو..." />
                 </div>
 
-                <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-sm transition-all shadow-lg">
-                   تأكيد الحجز
+                {isEditing && (
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-400 uppercase pr-2">الحالة</label>
+                    <select value={appStatus} onChange={e => setAppStatus(e.target.value as AppointmentStatus)} className="w-full p-3.5 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-right font-bold text-xs">
+                      {Object.values(AppointmentStatus).map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-black text-sm transition-all shadow-lg hover:bg-blue-700">
+                   {isEditing ? 'تحديث البيانات' : 'تأكيد الحجز'}
                 </button>
              </form>
           </div>
