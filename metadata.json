@@ -1,0 +1,8 @@
+
+{
+  "name": "Ameer Dental Clinic",
+  "description": "Professional dental management system with comprehensive patient onboarding, clinical charting, and AI-driven diagnostics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
