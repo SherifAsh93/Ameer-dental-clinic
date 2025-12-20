@@ -63,8 +63,56 @@ const Dashboard: React.FC<{ onNavigate: (tab: string) => void }> = ({ onNavigate
   );
 };
 
+const LockScreen: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
+  const [pass, setPass] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pass === '123') {
+      onUnlock();
+    } else {
+      setError(true);
+      setPass('');
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20 px-4 animate-in fade-in zoom-in duration-300">
+       <div className="bg-white p-8 md:p-12 rounded-[2.5rem] border border-slate-200 shadow-xl max-w-sm w-full text-center space-y-6">
+          <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto text-blue-600 shadow-inner">
+             <i className="fas fa-lock text-3xl"></i>
+          </div>
+          <div className="space-y-2">
+             <h3 className="text-xl font-black text-slate-900">قسم محمي</h3>
+             <p className="text-xs font-bold text-slate-400">يرجى إدخال كلمة المرور للوصول إلى البيانات</p>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+             <input 
+                type="password" 
+                autoFocus
+                value={pass}
+                onChange={e => setPass(e.target.value)}
+                placeholder="••••"
+                className={`w-full p-4 bg-slate-50 border-2 rounded-2xl text-center text-2xl tracking-[1rem] focus:ring-4 outline-none transition-all ${error ? 'border-red-500 animate-shake bg-red-50' : 'border-slate-100 focus:ring-blue-500/10 focus:border-blue-500'}`}
+             />
+             {error && <p className="text-[10px] font-black text-red-500">كلمة المرور غير صحيحة!</p>}
+             <button 
+                type="submit" 
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm hover:bg-slate-800 transition-all shadow-lg"
+             >
+                فتح القفل
+             </button>
+          </form>
+       </div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientModal, setShowPatientModal] = useState(false);
@@ -133,6 +181,12 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    // Logic for Protected Tabs
+    const isProtected = activeTab === 'patients' || activeTab === 'appointments';
+    if (isProtected && !isAuthorized) {
+      return <LockScreen onUnlock={() => setIsAuthorized(true)} />;
+    }
+
     if (selectedPatient) {
       return (
         <PatientProfile 
@@ -176,6 +230,14 @@ const App: React.FC = () => {
 
   return (
     <Layout activeTab={activeTab} setActiveTab={handleTabChange}>
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+      `}</style>
       <div className="max-w-full overflow-hidden">
         {renderContent()}
       </div>
